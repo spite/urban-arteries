@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Urban Arteries</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/guspira@0.1.1/css/gui.css">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+    "@mapbox/vector-tile": "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@2.0.3/+esm",
+    "pbf": "https://cdn.jsdelivr.net/npm/pbf@4.0.1/+esm",
+    "guspira": "https://cdn.jsdelivr.net/npm/guspira@0.1.1/dist/guspira.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="container"></div>
+<div id="progress"></div>
+
+<header id="panel">
+	<h1>Urban Arteries</h1>
+	<p class="sub">Walking routes from one point out to the edge of the city around it, bundled along the streets they share.</p>
+	<form id="search">
+		<input id="query" type="text" placeholder="Address, place or lat,lon" autocomplete="off">
+		<button type="submit">Go</button>
+		<button type="button" id="locate" title="Use my location">&#9678;</button>
+	</form>
+	<ul id="cities"></ul>
+</header>
+
+<footer id="controls">
+	<div id="status"></div>
+</footer>
+
+<div id="gui-container"></div>
+
+<div id="credits">
+	Streets &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>
+	&middot; Tiles: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> / <a href="https://openmaptiles.org" target="_blank" rel="noopener">OpenMapTiles</a>
+	&middot; Terrain: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a>
+	&middot; Search: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>
+</div>
+
+<script type="module" src="main.js"></script>
+</body>
+</html>

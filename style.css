@@ -1,0 +1,137 @@
+* { box-sizing: border-box; }
+
+html, body {
+	margin: 0;
+	height: 100%;
+	background: #05060a;
+	color: #cfd6e6;
+	font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+	overflow: hidden;
+}
+
+a { color: #9fb4ff; }
+
+#container { position: fixed; inset: 0; }
+
+#progress {
+	--p: 0;
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 2px;
+	background: linear-gradient( 90deg, #6f8cff, #ffc98a );
+	box-shadow: 0 0 8px rgba( 255, 201, 138, .6 );
+	transform: scaleX( var( --p ) );
+	transform-origin: left;
+	opacity: 0;
+	pointer-events: none;
+	transition: transform .25s ease-out, opacity .4s;
+}
+
+#progress.reset { transition: none; }
+#progress.active { opacity: 1; }
+#progress.done { opacity: 0; transition: transform .25s ease-out, opacity .6s .4s; }
+#progress.error { opacity: 1; background: #ff8a8a; box-shadow: none; }
+
+#panel {
+	position: fixed;
+	top: 16px;
+	left: 16px;
+	max-width: min(420px, calc(100vw - 32px));
+	pointer-events: none;
+}
+
+#panel > * { pointer-events: auto; }
+
+h1 {
+	margin: 0;
+	font-weight: 300;
+	font-size: 28px;
+	letter-spacing: .04em;
+	color: #fff;
+}
+
+.sub { margin: 4px 0 12px; opacity: .6; }
+
+#search { display: flex; gap: 6px; }
+
+#panel input, #panel button {
+	font: inherit;
+	color: inherit;
+	background: rgba(255, 255, 255, .06);
+	border: 1px solid rgba(255, 255, 255, .15);
+	border-radius: 6px;
+	padding: 6px 10px;
+}
+
+#panel input[type=text] { flex: 1; min-width: 0; }
+#panel button { cursor: pointer; }
+#panel button:hover { background: rgba(255, 255, 255, .12); }
+
+#cities {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+	list-style: none;
+	padding: 0;
+	margin: 10px 0 0;
+}
+
+#cities a { color: #cfd6e6; opacity: .55; text-decoration: none; cursor: pointer; }
+#cities a:hover, #cities a.active { opacity: 1; color: #ffc98a; }
+
+#controls {
+	position: fixed;
+	left: 16px;
+	bottom: 36px;
+	right: 16px;
+	pointer-events: none;
+}
+
+#gui-container {
+	position: fixed;
+	top: 12px;
+	right: 12px;
+	width: 340px;
+	max-width: calc(100vw - 24px);
+}
+
+#gui-container .gui {
+	--gui-bg: #0e1119;
+	--gui-fg: #d6dceb;
+	--gui-muted: #7d8699;
+	--gui-field-bg: #171b26;
+	--gui-border: #2a3142;
+	--gui-focus: #ffc98a;
+	--gui-accent: #ffc98a;
+	--gui-btn-bg: #1f2533;
+	--gui-btn-hover: #283044;
+	--gui-btn-active: #141824;
+	--gui-track: #262c3b;
+	--gui-fill: #ffc98a;
+	--gui-thumb: #ffe2bd;
+	--gui-thumb-hover: #fff0dc;
+	--gui-check: #0e1119;
+	--gui-label-width: 110px;
+	color-scheme: dark;
+	box-shadow: 0 8px 30px rgba(0, 0, 0, .5);
+}
+
+/* The open dropdown list is drawn by the browser; give its options the panel's colours. */
+#gui-container .gui option {
+	background: #171b26;
+	color: #d6dceb;
+}
+
+#status { flex-basis: 100%; min-height: 1.4em; color: #ffc98a; }
+#status.error { color: #ff8a8a; }
+
+#credits {
+	position: fixed;
+	left: 16px;
+	right: 16px;
+	bottom: 10px;
+	font-size: 11px;
+	opacity: .45;
+}
