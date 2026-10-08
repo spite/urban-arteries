@@ -1,7 +1,10 @@
 import { VectorTile } from '@mapbox/vector-tile';
 import Pbf from 'pbf';
 
-// Street network from OpenFreeMap vector tiles (OpenMapTiles schema), rebuilt into a routable graph.
+// Street network from OpenFreeMap vector tiles (OpenMapTiles schema), returned as OSM-shaped elements:
+// { type: 'node', id, lat, lon } and { type: 'way', nodes: [ids], tags: { highway } }, the same shape Overpass returns.
+// Tiles are simplified for drawing, so the network is re-noded here: streets are split where they cross,
+// dead ends within SNAP of another street are welded onto it, and streets cut at tile edges are joined back.
 
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
 const Z = 14;
@@ -38,7 +41,7 @@ async function loadTile( url, signal, onBytes ) {
 		try {
 			return await readTile( url, signal, onBytes );
 		} catch ( e ) {
-			if ( signal.aborted || attempt === 3 ) throw e;
+			if ( signal?.aborted || attempt === 3 ) throw e;
 			await new Promise( ( r ) => setTimeout( r, 500 * attempt ) );
 		}
 	}
@@ -70,7 +73,8 @@ function clip( ax, ay, bx, by ) {
 	return [ ax + dx * t0, ay + dy * t0, ax + dx * t1, ay + dy * t1 ];
 }
 
-export async function fetchStreetsFromTiles( lat, lon, radius, signal, onProgress ) {
+// onProgress receives { loaded, total, bytes } while tiles download, then { stitching: true } before the re-noding.
+export async function fetchStreetsFromTiles( lat, lon, radius, { signal, onProgress = () => {} } = {} ) {
 	const url = await tileTemplate( signal );
 	const n = 2 ** Z;
 	const tileX = ( lo ) => ( lo + 180 ) / 360 * n;
@@ -100,7 +104,8 @@ export async function fetchStreetsFromTiles( lat, lon, radius, signal, onProgres
 	// Download order varies; a fixed order keeps node numbering, and so routing ties, the same every load.
 	tiles.sort( ( a, b ) => a.ty - b.ty || a.tx - b.tx );
 	onProgress( { loaded, total: coords.length, bytes, stitching: true } );
-	await new Promise( ( r ) => requestAnimationFrame( () => setTimeout( r ) ) );
+	// Lets a page repaint before the re-noding; outside a browser a plain timeout does.
+	await new Promise( ( r ) => typeof requestAnimationFrame === 'function' ? requestAnimationFrame( () => setTimeout( r ) ) : setTimeout( r ) );
 
 	// Segments in a shared grid: integer units of the z14 tile extent, relative to the first tile.
 	const ax = [], ay = [], bx = [], by = [], kind = [], bridge = [];
