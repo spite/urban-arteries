@@ -46,6 +46,12 @@ export function createViewer( container, { fov = 50, far = 200000, background = 
 		setFov: rig.setFov,
 		setTilt: rig.setTilt,
 		setLook: post.setLook,
+		setBands: post.setBands,
+		setDebug: post.setDebug,
+		setBounds: post.setBounds,
+		get bands() {
+			return post.bands;
+		},
 		// Renders at `scale` of the full pixel ratio; strokes and blur are sized in device pixels, so the picture
 		// keeps its proportions and only gets softer.
 		setScale( scale ) {

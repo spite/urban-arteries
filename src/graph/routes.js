@@ -144,19 +144,30 @@ export function branches( routes, { exponent = .45 } = {} ) {
 		children.get( u ).push( { v, w: Math.pow( flow / maxFlow, exponent ) } );
 		isChild.add( v );
 	}
+	// Routes from different rounds can meet a node from two sides, so the network is not always a tree: each node's
+	// children are followed once, by whichever branch reaches it first.
+	const expanded = new Set();
 	const stack = [];
-	for ( const [ u, list ] of children ) if ( ! isChild.has( u ) ) for ( const c of list ) stack.push( [ u, c ] );
+	for ( const [ u, list ] of children ) {
+		if ( isChild.has( u ) ) continue;
+		expanded.add( u );
+		for ( const c of list ) stack.push( [ u, c ] );
+	}
 	const out = [];
 	while ( stack.length ) {
 		const [ start, first ] = stack.pop();
 		const nodes = [ start, first.v ], weights = [ first.w, first.w ];
 		let tail = first.v;
-		for ( let next = children.get( tail ); next && next.length === 1; next = children.get( tail ) ) {
+		for ( let next = children.get( tail ); next && next.length === 1 && ! expanded.has( tail ); next = children.get( tail ) ) {
+			expanded.add( tail );
 			tail = next[ 0 ].v;
 			nodes.push( tail );
 			weights.push( next[ 0 ].w );
 		}
-		for ( const c of children.get( tail ) || [] ) stack.push( [ tail, c ] );
+		if ( ! expanded.has( tail ) ) {
+			expanded.add( tail );
+			for ( const c of children.get( tail ) || [] ) stack.push( [ tail, c ] );
+		}
 		out.push( { nodes, weights } );
 	}
 	return out;

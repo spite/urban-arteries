@@ -1,0 +1,13 @@
+{
+	"name": "urban-arteries",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "node --test \"test/*.test.js\"",
+		"test:online": "ONLINE=1 node --test \"test/*.test.js\""
+	},
+	"devDependencies": {
+		"@mapbox/vector-tile": "2.0.3",
+		"pbf": "4.0.1"
+	}
+}

@@ -20,8 +20,9 @@ const colorGLSL = /* glsl */`
 	}
 `;
 
-// Lines: one quad per segment (geometry.js segmentGeometry), drawn sharp and antialiased in the band's pixels,
-// joined at the bisector inside a path and squared off at free ends and at the growth front. A stroke thinner than
+// Lines: one quad per segment (geometry.js segmentGeometry), drawn sharp and antialiased in the band's pixels as
+// a capsule, cut at the bisector where two segments of a path meet: the two capsules mirror each other across it,
+// so every corner comes out round at any angle, without a gap or a doubled overlap. A stroke thinner than
 // a pixel is drawn a pixel wide with its light scaled down, so it carries the right amount at any band resolution.
 function lineMaterial( lens, uniforms ) {
 	return createLensMaterial( lens, {
@@ -32,18 +33,18 @@ function lineMaterial( lens, uniforms ) {
 			attribute vec2 aJoin, aDist;
 			attribute float aW;
 			// vLocal: band pixels along the segment from its start, and across from its axis. vClip: signed pixels
-			// inside the bisectors at a joined start and end. Linear in screen space, hence w = 1 below.
+			// on this segment's side of the bisectors at its start and end. Linear in screen space, hence w = 1 below.
 			varying vec2 vLocal, vClip, vJoin, vDist;
 			varying float vLength, vHalf, vLight, vW;
-			varying vec3 vShare;
+			varying float vShare;
 
 			vec4 view( vec3 p ) { return modelViewMatrix * vec4( p * vec3( 1., uExag, 1. ), 1. ); }
 
 			void main() {
 				vec4 m0 = view( aStart ), m1 = view( aEnd );
-				vec3 w0 = bandWeights( blurRadii( - m0.z ) ), w1 = bandWeights( blurRadii( - m1.z ) );
+				float w0 = bandWeight( blurRadius( - m0.z ) ), w1 = bandWeight( blurRadius( - m1.z ) );
 				vec4 c0 = projectionMatrix * m0, c1 = projectionMatrix * m1;
-				if ( c0.w <= 0. || c1.w <= 0. || max( max( w0.r, w0.g ), max( max( w0.b, w1.r ), max( w1.g, w1.b ) ) ) <= 0. ) {
+				if ( c0.w <= 0. || c1.w <= 0. || max( w0, w1 ) <= 0. ) {
 					gl_Position = vec4( 2., 2., 2., 1. );
 					return;
 				}
@@ -65,19 +66,13 @@ function lineMaterial( lens, uniforms ) {
 				vHalf = max( halfWidth, .5 );
 				vLight = halfWidth / vHalf;
 				float m = vHalf + 1.;
-				// A joint is clipped at the bisector only when its miter fits well inside both segments.
-				float tan0 = sqrt( max( 1. - dot( inDir, dir ), 0. ) / max( 1. + dot( inDir, dir ), 1e-3 ) );
-				float tan1 = sqrt( max( 1. - dot( dir, outDir ), 0. ) / max( 1. + dot( dir, outDir ), 1e-3 ) );
-				float join0 = aJoin.x * step( m * ( 1. + tan0 ), .5 * min( L, length( dp ) ) );
-				float join1 = aJoin.y * step( m * ( 1. + tan1 ), .5 * min( L, length( dn ) ) );
 
 				float t = position.x, side = position.y;
-				float reach = t < .5 ? m * ( 1. + join0 * min( tan0, 6. ) ) : m * ( 1. + join1 * min( tan1, 6. ) );
-				vec2 p = mix( s0, s1, t ) + dir * ( t * 2. - 1. ) * reach + nrm * side * m;
+				vec2 p = mix( s0, s1, t ) + ( dir * ( t * 2. - 1. ) + nrm * side ) * m;
 
 				vLocal = vec2( dot( p - s0, dir ), side * m );
 				vClip = vec2( dot( p - s0, b0 ), dot( s1 - p, b1 ) );
-				vJoin = vec2( join0, join1 );
+				vJoin = aJoin;
 				vDist = aDist;
 				vLength = L;
 				vW = aW;
@@ -89,18 +84,19 @@ function lineMaterial( lens, uniforms ) {
 			${colorGLSL}
 			varying vec2 vLocal, vClip, vJoin, vDist;
 			varying float vLength, vHalf, vLight, vW;
-			varying vec3 vShare;
+			varying float vShare;
 
 			void main() {
 				float k = clamp( ( uGrow - vDist.x ) / max( vDist.y - vDist.x, 1e-3 ), 0., 1. );
 				if ( k <= 0. ) discard;
 				bool joinStart = vJoin.x > .5, joinEnd = vJoin.y > .5 && k >= 1.;
 				if ( ( joinStart && vClip.x < 0. ) || ( joinEnd && vClip.y < 0. ) ) discard;
-				float u = vLocal.x, L = vLength * k;
-				float across = clamp( vHalf - abs( vLocal.y ) + .5, 0., 1. );
-				float along = ( joinStart ? 1. : clamp( u + .5, 0., 1. ) ) * ( joinEnd ? 1. : clamp( L - u + .5, 0., 1. ) );
+				float u = vLocal.x;
+				// Round past the end and behind a joined start; a path's free start sits on its parent and stays flat.
+				float beyond = max( u - vLength * k, 0. ) + ( joinStart ? min( u, 0. ) : 0. );
+				float cover = clamp( vHalf - length( vec2( beyond, vLocal.y ) ) + .5, 0., 1. ) * ( joinStart ? 1. : clamp( u + .5, 0., 1. ) );
 				float dist = mix( vDist.x, vDist.y, clamp( u / max( vLength, 1e-3 ), 0., 1. ) );
-				gl_FragColor = vec4( arteryColor( vW, dist, .35, .9 ) * vShare * across * along * vLight, 1. );
+				gl_FragColor = vec4( arteryColor( vW, dist, .35, .9 ) * vShare * cover * vLight, 1. );
 			}
 		`,
 	} );
@@ -116,11 +112,11 @@ function pointMaterial( lens, uniforms, { destinations } ) {
 			attribute float aDist;
 			${destinations ? '' : 'attribute float aW;'}
 			varying float vW, vDist, vRadius, vLight, vSize, vFade;
-			varying vec3 vShare;
+			varying float vShare;
 
 			void main() {
 				vec4 mv = modelViewMatrix * vec4( position * vec3( 1., uExag, 1. ), 1. );
-				vShare = bandWeights( blurRadii( - mv.z ) );
+				vShare = bandWeight( blurRadius( - mv.z ) );
 				vW = ${destinations ? '0.' : 'aW'};
 				vDist = aDist;
 				vFade = ${destinations ? 'smoothstep( 0., uFade, aDist - uGrow )' : 'aDist <= uGrow ? 1. : 0.'};
@@ -128,7 +124,7 @@ function pointMaterial( lens, uniforms, { destinations } ) {
 				vRadius = max( r, .5 );
 				vLight = ( r * r ) / ( vRadius * vRadius );
 				vSize = 2. * vRadius + 2.;
-				bool visible = vFade > 0. && max( vShare.r, max( vShare.g, vShare.b ) ) > 0.;
+				bool visible = vFade > 0. && vShare > 0.;
 				gl_Position = visible ? projectionMatrix * mv : vec4( 2., 2., 2., 1. );
 				gl_PointSize = visible ? vSize : 0.;
 			}
@@ -136,7 +132,7 @@ function pointMaterial( lens, uniforms, { destinations } ) {
 		fragmentShader: /* glsl */`
 			${colorGLSL}
 			varying float vW, vDist, vRadius, vLight, vSize, vFade;
-			varying vec3 vShare;
+			varying float vShare;
 
 			void main() {
 				float cover = clamp( vRadius - length( gl_PointCoord - .5 ) * vSize + .5, 0., 1. );
@@ -153,16 +149,16 @@ function markerMaterial( lens, uniforms ) {
 		uniforms,
 		vertexShader: /* glsl */`
 			uniform float uExag;
-			varying vec3 vShare;
+			varying float vShare;
 			void main() {
-				vShare = bandWeights( vec3( 0. ) );
+				vShare = bandWeight( 0. );
 				gl_Position = projectionMatrix * modelViewMatrix * vec4( position * vec3( 1., uExag, 1. ), 1. );
 				gl_PointSize = bandPixels( 48. );
 			}
 		`,
 		fragmentShader: /* glsl */`
 			uniform float uTime;
-			varying vec3 vShare;
+			varying float vShare;
 			void main() {
 				float d = length( gl_PointCoord - .5 ) * 2.;
 				float ring = exp( - abs( d - fract( uTime * .5 ) ) * 20. ) * ( 1. - fract( uTime * .5 ) );
@@ -202,6 +198,7 @@ export function createArteries( lens ) {
 	let meshes = {};
 	let style = 'lines', showDestinations = true;
 	let growStart = 0, maxDist = 1;
+	const box = new THREE.Box3( new THREE.Vector3(), new THREE.Vector3() );
 
 	function applyVisibility() {
 		if ( meshes.lines ) meshes.lines.visible = style === 'lines';
@@ -232,9 +229,17 @@ export function createArteries( lens ) {
 				m.frustumCulled = false;
 				group.add( m );
 			}
+			box.set( new THREE.Vector3(), new THREE.Vector3() );
+			for ( const { points } of paths ) for ( const p of points ) box.expandByPoint( new THREE.Vector3( ...p ) );
+			for ( const { point } of destinations ) box.expandByPoint( new THREE.Vector3( ...point ) );
 			uniforms.uFade.value = Math.max( longest * .15, 1 );
 			maxDist = longest;
 			applyVisibility();
+		},
+		// A sphere around everything drawn, heights exaggerated as they are drawn; for LayeredPass.bounds.
+		get bounds() {
+			const exag = new THREE.Vector3( 1, uniforms.uExag.value, 1 );
+			return new THREE.Box3( box.min.clone().multiply( exag ), box.max.clone().multiply( exag ) ).getBoundingSphere( new THREE.Sphere() );
 		},
 		// style: 'lines' or 'particles'.
 		setStyle( value ) {

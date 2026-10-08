@@ -30,7 +30,6 @@ export function buildPanel( container, { params, presets, info, stats, actions }
 	gui.addSection( 'Lens' );
 	gui.addSlider( 'Focal length', params.lens, 14, 300, 1, { curve: 'log', title: 'Millimetres, 35 mm equivalent; the camera dollies to keep the city the same size' } );
 	gui.addSlider( 'Aperture %', params.aperture, 0, 200, .1, { curve: 3, title: 'Aperture diameter as a share of the radius; streets blur away from the focal plane at the orbit centre. Macro lenses open wider than the subject itself, so long focal lengths want large values' } );
-	gui.addSlider( 'Chromatic', params.chroma, 0, 1, .01, { title: 'Longitudinal chromatic aberration: magenta fringes in front of focus, green behind' } );
 	gui.addSlider( 'Bokeh rim', params.rim, 0, 1, .01, { title: 'Spherical aberration: pushes the light of out-of-focus streets toward their edges' } );
 	gui.addSlider( 'Tilt', params.tilt, 2, 88, 1, { title: 'Camera height in degrees above the ground; low angles cut the focal plane across the city' } );
 	gui.addSection( 'Light' );
@@ -71,5 +70,25 @@ export function buildPanel( container, { params, presets, info, stats, actions }
 	gui.addMonitor( 'Segments drawn', info.segments, { format: thousands } );
 	gui.addMonitor( 'Load', info.load, { format: ( v ) => `${( v / 1000 ).toFixed( 1 )} s` } );
 	gui.addMonitor( 'Routing', info.routing, { format: ( v ) => `${v} ms` } );
+
+	gui.addTab( 'Debug' );
+	gui.addSection( 'View' );
+	gui.addSegmented( 'Show', params.debugView, [ [ 'final', 'Final' ], [ 'grid', 'All bands' ], [ 'band', 'One band' ] ], { ...fixed, title: 'The finished image, or the depth-of-field bands it is added up from' } );
+	const inspecting = () => params.debugView() !== 'final';
+	gui.addSlider( 'Band', params.debugBand, 0, 13, 1, { ...fixed, visibleWhen: () => params.debugView() === 'band', title: 'Which band to show, 0 being the sharp one; kept below the band count' } );
+	gui.addSegmented( 'Stage', params.debugStage, [ [ 'blurred', 'Blurred' ], [ 'sharp', 'Sharp' ] ], { ...fixed, visibleWhen: inspecting, title: 'Each band as drawn, or after the aperture blur' } );
+	gui.addSlider( 'Gain', params.debugGain, .1, 100, .1, { ...fixed, curve: 'log', visibleWhen: inspecting, title: 'Brightens faint bands' } );
+	gui.addSection( 'Bands' );
+	gui.addSlider( 'Count', params.bandCount, 2, 14, 1, { ...fixed, title: 'Bands between sharp and the largest blur: more means finer steps between blur sizes' } );
+	gui.addSlider( 'First radius', params.bandFirst, .5, 8, .25, { ...fixed, title: 'Blur radius of the first blurred band, in screen pixels' } );
+	gui.addSlider( 'Largest blur', params.bandLargest, 8, 512, 1, { ...fixed, curve: 'log', title: 'Blur radius of the last band, in screen pixels; anything blurrier is held at it' } );
+	gui.addSlider( 'Texels', params.bandTexels, 1, 8, .5, { ...fixed, title: 'How wide a band\'s blur is in its own pixels, which sets its resolution: more is sharper and costlier' } );
+	gui.addSlider( 'Taps', params.blurTaps, 8, 128, 8, { ...fixed, title: 'Samples in the aperture disc' } );
+	gui.addCheckbox( 'Smooth split', params.bandBlend, { ...fixed, title: 'Split each stroke between its two nearest bands; off puts it all in the nearest, showing the steps' } );
+	gui.addCheckbox( 'Cubic upscale', params.cubic, { ...fixed, title: 'Smooth upscaling of low-resolution bands; off is bilinear' } );
+	gui.addMonitor( 'Radii', info.bandRadii );
+	gui.addMonitor( 'Pixels drawn', info.bandCost, { title: 'All bands together, against one screen' } );
+	gui.addSection( 'Bloom' );
+	gui.addSlider( 'Threshold', params.bloomThreshold, 0, 4, .05, { ...fixed, title: 'Light above which bloom starts' } );
 	return gui;
 }

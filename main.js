@@ -11,13 +11,15 @@ import { createProgress } from './src/ui/progress.js';
 import { buildPanel } from './src/ui/panel.js';
 import { writeUrl, readPlace } from './src/ui/url.js';
 import { createSettings, CITIES, RADII } from './src/params.js';
+import { createBandLabels } from './src/ui/band-labels.js';
+import { bandRadii } from './src/lens/layered-pass.js';
 
 const $ = ( id ) => document.getElementById( id );
 const statusEl = $( 'status' );
 
 const { params, presets } = createSettings();
 const sceneRadius = signal( 1200 );
-const info = { scale: signal( 1 ), nodes: signal( 0 ), segments: signal( 0 ), destinations: signal( 0 ), load: signal( 0 ), routing: signal( 0 ), exported: signal( '—' ) };
+const info = { bandRadii: signal( '' ), bandCost: signal( '' ), scale: signal( 1 ), nodes: signal( 0 ), segments: signal( 0 ), destinations: signal( 0 ), load: signal( 0 ), routing: signal( 0 ), exported: signal( '—' ) };
 const progress = createProgress( $( 'progress' ) );
 
 function setStatus( text, error = false ) {
@@ -38,9 +40,21 @@ viewer.controls.addEventListener( 'start', () => params.rotate.set( false ) );
 const stats = createStats();
 const fps = stats.fps();
 const frameTime = stats.timer( 'frame' );
+const labels = createBandLabels( $( 'container' ) );
+
+// The band readouts and grid captions, which change with the band settings and the render size.
+function showBands() {
+	const bands = viewer.bands, [ full ] = bands;
+	info.bandRadii.set( bands.map( ( b ) => + b.radius.toFixed( 2 ) ).join( ' · ' ) );
+	info.bandCost.set( `${( bands.reduce( ( s, b ) => s + b.width * b.height, 0 ) / ( full.width * full.height ) ).toFixed( 2 )}× screen` );
+	labels.update( bands, params.debugView.peek() === 'grid' );
+}
+addEventListener( 'resize', showBands );
+
 const adaptive = createAdaptiveScale( ( scale ) => {
 	viewer.setScale( scale );
 	info.scale.set( scale );
+	showBands();
 } );
 let lastFrame = 0;
 
@@ -82,6 +96,7 @@ async function reroute() {
 	city.paths = toPaths( g, heights, routes.dist, branches( routes ) );
 	city.extent = routeExtent( g, routes );
 	arteries.set( city.paths, { radius, maxDist: routes.maxDist, destinations: toDestinations( g, heights, routes ) } );
+	viewer.setBounds( arteries.bounds );
 	arteries.replay();
 	const ms = Math.round( performance.now() - t0 );
 	const count = routes.segs.length;
@@ -198,12 +213,40 @@ $( 'locate' ).addEventListener( 'click', () => {
 
 const { lens } = viewer;
 effect( () => { lens.uAperture.value = params.aperture() / 100 * sceneRadius(); } );
-effect( () => { lens.uChroma.value = params.chroma(); } );
 effect( () => { lens.uRim.value = params.rim(); } );
 effect( () => { viewer.setFov( fovOf( params.lens() ) ); } );
 effect( () => { viewer.setTilt( params.tilt() ); } );
-effect( () => { viewer.setLook( { exposure: params.exposure(), bloom: params.bloom(), grain: params.grain() } ); } );
-effect( () => { arteries.setLook( { size: params.size(), exaggeration: params.terrain(), cold: params.cold(), warm: params.warm() } ); } );
+effect( () => { viewer.setLook( { exposure: params.exposure(), bloom: params.bloom(), bloomThreshold: params.bloomThreshold(), grain: params.grain() } ); } );
+effect( () => { lens.uBandBlend.value = params.bandBlend() ? 1 : 0; } );
+// The band slider can't go past the last band.
+effect( () => {
+	const last = params.bandCount() - 1;
+	if ( params.debugBand() > last ) params.debugBand.set( last );
+} );
+effect( () => {
+	viewer.setDebug( { view: params.debugView(), band: Math.min( params.debugBand(), params.bandCount() - 1 ), stage: params.debugStage(), gain: params.debugGain() } );
+	untrack( showBands );
+} );
+
+// Band changes rebuild targets and shaders, so a slider drag settles before they apply.
+let bandTimer = 0;
+effect( () => {
+	const options = {
+		radii: bandRadii( { count: params.bandCount(), first: params.bandFirst(), largest: params.bandLargest() } ),
+		texels: params.bandTexels(),
+		taps: params.blurTaps(),
+		cubic: params.cubic(),
+	};
+	clearTimeout( bandTimer );
+	bandTimer = setTimeout( () => {
+		viewer.setBands( options );
+		showBands();
+	}, 150 );
+} );
+effect( () => {
+	arteries.setLook( { size: params.size(), exaggeration: params.terrain(), cold: params.cold(), warm: params.warm() } );
+	viewer.setBounds( arteries.bounds );
+} );
 effect( () => {
 	viewer.setBackground( params.background() );
 	document.body.style.background = params.background();

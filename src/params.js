@@ -27,11 +27,11 @@ export const DEFAULTS = {
 	aperture: 6,
 	lens: 26,
 	tilt: 24,
-	chroma: .3,
 	rim: .2,
 	exposure: 1.1,
 	bloom: .3,
 	grain: .035,
+	bloomThreshold: 1,
 	size: 1,
 	terrain: 2,
 	cold: '#5280ff',
@@ -43,6 +43,17 @@ export const DEFAULTS = {
 	rotate: true,
 	resolution: 1,
 	adaptive: true,
+	debugView: 'final',
+	debugBand: 0,
+	debugStage: 'blurred',
+	debugGain: 1,
+	bandCount: 9,
+	bandFirst: 2,
+	bandLargest: 256,
+	bandTexels: 3,
+	blurTaps: 48,
+	bandBlend: true,
+	cubic: true,
 	printSize: 150,
 	printBase: 'relief',
 };
@@ -55,8 +66,8 @@ export const PRESETS = {
 	Scattered: { algorithm: 'shortest', layout: 'scatter', count: 400 },
 	Ember: { cold: '#ff5a36', warm: '#ffe08a', background: '#0a0503' },
 	Ice: { cold: '#3a6bff', warm: '#c8f0ff', background: '#02040a' },
-	Macro: { style: 'lines', lens: 135, tilt: 12, aperture: 80, chroma: .25, rim: .5, bloom: .45, exposure: 1.25, grain: .05 },
-	Microscope: { style: 'lines', lens: 200, tilt: 62, aperture: 60, chroma: .35, rim: .3, bloom: .6, exposure: 1.3, cold: '#1fd47a', warm: '#d9ffe6', background: '#000302' },
+	Macro: { style: 'lines', lens: 135, tilt: 12, aperture: 80, rim: .5, bloom: .45, exposure: 1.25, grain: .05 },
+	Microscope: { style: 'lines', lens: 200, tilt: 62, aperture: 60, rim: .3, bloom: .6, exposure: 1.3, cold: '#1fd47a', warm: '#d9ffe6', background: '#000302' },
 };
 
 // One typed store for every setting: saved between visits, read from the URL (?style=lines), and the looks ease
@@ -73,11 +84,11 @@ export function createSettings() {
 			if ( stored.count === 150 ) delete stored.count;
 			return stored;
 		},
-		ease: { duration: 450, easing: easings.cubicOut, only: [ 'aperture', 'lens', 'tilt', 'chroma', 'rim', 'exposure', 'bloom', 'grain', 'size', 'terrain', 'cold', 'warm', 'background' ] },
+		ease: { duration: 450, easing: easings.cubicOut, only: [ 'aperture', 'lens', 'tilt', 'rim', 'exposure', 'bloom', 'grain', 'size', 'terrain', 'cold', 'warm', 'background' ] },
 	} );
 	const presets = createPresetStore( params, {
 		storageKey: 'urban-arteries-presets',
-		exclude: [ 'printSize', 'printBase', 'resolution', 'adaptive' ],
+		exclude: [ 'printSize', 'printBase', 'resolution', 'adaptive', 'debugView', 'debugBand', 'debugStage', 'debugGain', 'bandCount', 'bandFirst', 'bandLargest', 'bandTexels', 'blurTaps', 'bandBlend', 'cubic' ],
 		builtin: PRESETS,
 	} );
 	return { params, presets };
