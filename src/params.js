@@ -21,9 +21,17 @@ export const DEFAULTS = {
 	algorithm: 'main',
 	count: 800,
 	layout: 'ring',
+	depth: .1,
 	bundling: .6,
-	style: 'particles',
+	style: 'lines',
 	aperture: 6,
+	lens: 26,
+	tilt: 24,
+	chroma: .3,
+	rim: .2,
+	exposure: 1.1,
+	bloom: .3,
+	grain: .035,
 	size: 1,
 	terrain: 2,
 	cold: '#5280ff',
@@ -31,7 +39,11 @@ export const DEFAULTS = {
 	background: '#05060a',
 	grow: 5,
 	pulse: true,
+	targets: true,
 	rotate: true,
+	pipeline: 'layered',
+	resolution: 1,
+	adaptive: true,
 	printSize: 150,
 	printBase: 'relief',
 };
@@ -44,24 +56,29 @@ export const PRESETS = {
 	Scattered: { algorithm: 'shortest', layout: 'scatter', count: 400 },
 	Ember: { cold: '#ff5a36', warm: '#ffe08a', background: '#0a0503' },
 	Ice: { cold: '#3a6bff', warm: '#c8f0ff', background: '#02040a' },
+	Macro: { style: 'lines', lens: 135, tilt: 12, aperture: 80, chroma: .25, rim: .5, bloom: .45, exposure: 1.25, grain: .05 },
+	Microscope: { style: 'lines', lens: 200, tilt: 62, aperture: 60, chroma: .35, rim: .3, bloom: .6, exposure: 1.3, cold: '#1fd47a', warm: '#d9ffe6', background: '#000302' },
 };
 
-// One typed store for every setting: saved between visits, overridable from the URL (?style=lines),
-// and the looks ease between values instead of jumping.
+// One typed store for every setting: saved between visits, read from the URL (?style=lines), and the looks ease
+// between values instead of jumping. A URL that carries settings is the whole state: anything it leaves out is at
+// its default, so saved settings are neither read nor overwritten and a shared link looks the same for everyone.
 export function createSettings() {
+	const query = typeof location !== 'undefined' ? new URLSearchParams( location.search ) : new URLSearchParams();
+	const linked = Object.keys( DEFAULTS ).some( ( key ) => query.has( key ) );
 	const params = createParams( DEFAULTS, {
-		storageKey: 'urban-arteries',
+		storageKey: linked ? null : 'urban-arteries',
 		url: true,
 		// Saves from before the default rose from 150 to 800 still hold the old default; let them take the new one.
 		migrate: ( stored ) => {
 			if ( stored.count === 150 ) delete stored.count;
 			return stored;
 		},
-		ease: { duration: 450, easing: easings.cubicOut, only: [ 'aperture', 'size', 'terrain', 'cold', 'warm', 'background' ] },
+		ease: { duration: 450, easing: easings.cubicOut, only: [ 'aperture', 'lens', 'tilt', 'chroma', 'rim', 'exposure', 'bloom', 'grain', 'size', 'terrain', 'cold', 'warm', 'background' ] },
 	} );
 	const presets = createPresetStore( params, {
 		storageKey: 'urban-arteries-presets',
-		exclude: [ 'printSize', 'printBase' ],
+		exclude: [ 'printSize', 'printBase', 'pipeline', 'resolution', 'adaptive' ],
 		builtin: PRESETS,
 	} );
 	return { params, presets };

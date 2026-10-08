@@ -12,22 +12,41 @@ export function seededRandom( seed ) {
 	};
 }
 
-// Ring: the farthest reachable node in each of `count` sectors, which is the radius or wherever the network
-// ends first, like a coastline. Scattered: random reachable nodes inside the radius.
-export function pickTargets( g, reachable, radius, count, layout ) {
+// Ring: destinations near the outer edge of the network, one per sector of the circle. The edge is the farthest
+// reachable node per half degree, widened over ±2° so a gap between two radial streets doesn't pull it inward,
+// yet it still follows a coastline. A node qualifies within depth × radius of that edge (at least 2%); `count` of
+// them are taken evenly through the qualifiers in angular order. Scattered: random reachable nodes inside the radius.
+export function pickTargets( g, reachable, radius, count, layout, { depth = .1 } = {} ) {
 	const random = seededRandom( count * 7919 + ( layout === 'ring' ? 1 : 2 ) );
 	if ( layout === 'ring' ) {
-		const best = new Int32Array( count ).fill( - 1 ), far = new Float64Array( count );
-		const turn = random() * 2 * Math.PI;
+		const BINS = 720, SPREAD = 4, TAU = 2 * Math.PI;
+		const turn = random() * TAU;
+		const angle = ( i ) => ( Math.atan2( g.zs[ i ], g.xs[ i ] ) + turn + 2 * TAU ) % TAU;
+		const far = new Float64Array( BINS );
 		for ( let i = 0; i < g.n; i ++ ) {
 			if ( ! reachable[ i ] ) continue;
 			const d = Math.hypot( g.xs[ i ], g.zs[ i ] );
 			if ( d > radius ) continue;
-			const a = ( Math.atan2( g.zs[ i ], g.xs[ i ] ) + turn + 4 * Math.PI ) % ( 2 * Math.PI );
-			const k = Math.min( count - 1, Math.floor( a / ( 2 * Math.PI ) * count ) );
-			if ( d > far[ k ] ) { far[ k ] = d; best[ k ] = i; }
+			const b = Math.min( BINS - 1, Math.floor( angle( i ) / TAU * BINS ) );
+			far[ b ] = Math.max( far[ b ], d );
 		}
-		return [ ...new Set( best.filter( ( i ) => i >= 0 ) ) ];
+		const edge = Float64Array.from( far, ( _, b ) => {
+			let m = 0;
+			for ( let k = - SPREAD; k <= SPREAD; k ++ ) m = Math.max( m, far[ ( b + k + BINS ) % BINS ] );
+			return m;
+		} );
+		const band = Math.max( depth, .02 ) * radius;
+		const near = [];
+		for ( let i = 0; i < g.n; i ++ ) {
+			if ( ! reachable[ i ] ) continue;
+			const d = Math.hypot( g.xs[ i ], g.zs[ i ] );
+			if ( d > radius ) continue;
+			const a = angle( i );
+			if ( d >= edge[ Math.min( BINS - 1, Math.floor( a / TAU * BINS ) ) ] - band ) near.push( [ a, i ] );
+		}
+		near.sort( ( x, y ) => x[ 0 ] - y[ 0 ] );
+		if ( near.length <= count ) return near.map( ( [ , i ] ) => i );
+		return Array.from( { length: count }, ( _, k ) => near[ Math.floor( ( k + random() ) * near.length / count ) ][ 1 ] );
 	}
 	const inside = [];
 	for ( let i = 0; i < g.n; i ++ ) if ( reachable[ i ] && Math.hypot( g.xs[ i ], g.zs[ i ] ) <= radius ) inside.push( i );
@@ -37,16 +56,19 @@ export function pickTargets( g, reachable, radius, count, layout ) {
 }
 
 // algorithm: 'main' prefers main streets (edge cost multipliers), avoids needless turns and bundles routes;
+// depth: for a ring, how far in from the network's edge destinations may lie, as a share of the radius;
 // 'shortest' uses plain distance; 'all' is the shortest-path tree to every node within the radius.
 // Bundling routes destinations in rounds and makes streets used by earlier rounds cheaper, so later routes
 // merge onto them. Yields between rounds; returns null when cancelled() turns true.
-// Resolves to { segs: [ { u, v, flow } ], dist, maxFlow, maxDist, targets }, dist being path length along the result.
+// Resolves to { segs: [ { u, v, flow } ], dist, maxFlow, maxDist, targets, targetNodes }: dist is path length along
+// the result, targets the number of destinations and targetNodes their node indices.
 export async function route( g, source, {
 	algorithm = 'main',
 	radius,
 	count = 800,
 	layout = 'ring',
 	bundling = .6,
+	depth = .1,
 	rounds: maxRounds = 32,
 	turnPenalty = 20,
 } = {}, { onRound = () => {}, cancelled = () => false } = {} ) {
@@ -61,14 +83,14 @@ export async function route( g, source, {
 			through[ tree.parent[ v ] ] += through[ v ];
 			flow[ tree.parentEdge[ v ] ] = through[ v ];
 		}
-		return collect( g, source, flow, 0 );
+		return collect( g, source, flow, [] );
 	}
 
 	const preferred = algorithm === 'main';
 	const base = preferred ? g.len.map( ( l, e ) => l * g.cost[ e ] ) : g.len;
 	const first = shortestPathTree( g, source, base );
 	const reachable = first.dist.map( ( d ) => d < Infinity ? 1 : 0 );
-	const targets = pickTargets( g, reachable, radius, count, layout );
+	const targets = pickTargets( g, reachable, radius, count, layout, { depth } );
 
 	const rounds = preferred && bundling > 0 ? Math.min( maxRounds, targets.length ) : 1;
 	const weight = new Float32Array( base );
@@ -91,7 +113,7 @@ export async function route( g, source, {
 		await new Promise( ( resolve ) => setTimeout( resolve ) );
 		if ( cancelled() ) return null;
 	}
-	return collect( g, source, flow, targets.length );
+	return collect( g, source, flow, targets );
 }
 
 function collect( g, source, flow, targets ) {
@@ -108,7 +130,7 @@ function collect( g, source, flow, targets ) {
 			maxDist = Math.max( maxDist, dist[ v ] );
 		}
 	}
-	return { segs, dist, maxFlow, maxDist, targets };
+	return { segs, dist, maxFlow, maxDist, targets: targets.length, targetNodes: targets };
 }
 
 // Chains the drawn edges into branches running from the source or a junction to the next junction or dead end.
@@ -138,6 +160,13 @@ export function branches( routes, { exponent = .45 } = {} ) {
 		out.push( { nodes, weights } );
 	}
 	return out;
+}
+
+// Destinations as { point: [ x, height, z ], dist } for anything drawn at them; unreached ones are dropped.
+export function toTargets( g, heights, routes ) {
+	return routes.targetNodes
+		.filter( ( v ) => routes.dist[ v ] < Infinity )
+		.map( ( v ) => ( { point: [ g.xs[ v ], heights[ v ], g.zs[ v ] ], dist: routes.dist[ v ] } ) );
 }
 
 // Branches as plain 3D paths, the format the renderers and the print model take:

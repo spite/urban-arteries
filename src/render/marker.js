@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
 // A glowing point with a ring pulsing out of it, drawn at a fixed screen size. Advance it by setting
-// marker.material.uniforms.uTime. Reads uExag and uPixelRatio from the shared uniforms.
+// marker.material.uniforms.uTime. Reads uExag and uPixelRatio from the shared uniforms, and in the layered pipeline
+// only draws into the sharp band.
 export function createMarker( uniforms, position = [ 0, 0, 0 ] ) {
 	const geometry = new THREE.BufferGeometry();
 	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( position, 3 ) );
@@ -19,7 +20,9 @@ export function createMarker( uniforms, position = [ 0, 0, 0 ] ) {
 		`,
 		fragmentShader: /* glsl */`
 			uniform float uTime;
+			uniform vec3 uBin;
 			void main() {
+				if ( uBin.y > 0. ) discard;
 				float d = length( gl_PointCoord - .5 ) * 2.;
 				float ring = exp( - abs( d - fract( uTime * .5 ) ) * 20. ) * ( 1. - fract( uTime * .5 ) );
 				float core = exp( - d * 9. );
