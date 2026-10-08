@@ -61,7 +61,6 @@ export function buildPanel( container, { params, presets, info, stats, actions }
 	gui.addGraph( 'Frame ms', stats.frameTime, { min: 0, over: 16.7 } );
 	gui.addMonitor( 'FPS', stats.fps, { format: ( v ) => v.toFixed( 0 ), below: 50 } );
 	gui.addSection( 'Performance' );
-	gui.addSegmented( 'Pipeline', params.pipeline, [ [ 'layered', 'Layered' ], [ 'direct', 'Direct' ] ], { ...fixed, title: 'Layered blurs bands of the scene as images, at a cost that hardly depends on blur; Direct blurs every stroke itself' } );
 	gui.addSlider( 'Resolution', params.resolution, .25, 1, .05, { ...fixed, title: 'Highest render resolution, as a share of the screen\'s' } );
 	gui.addCheckbox( 'Adaptive', params.adaptive, { ...fixed, title: 'Lower the resolution while frames are slow, and raise it back when they are fast again' } );
 	gui.addMonitor( 'Rendering at', info.scale, { format: ( v ) => `${Math.round( v * 100 )}%` } );

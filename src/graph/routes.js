@@ -16,7 +16,7 @@ export function seededRandom( seed ) {
 // reachable node per half degree, widened over ±2° so a gap between two radial streets doesn't pull it inward,
 // yet it still follows a coastline. A node qualifies within depth × radius of that edge (at least 2%); `count` of
 // them are taken evenly through the qualifiers in angular order. Scattered: random reachable nodes inside the radius.
-export function pickTargets( g, reachable, radius, count, layout, { depth = .1 } = {} ) {
+export function pickDestinations( g, reachable, radius, count, layout, { depth = .1 } = {} ) {
 	const random = seededRandom( count * 7919 + ( layout === 'ring' ? 1 : 2 ) );
 	if ( layout === 'ring' ) {
 		const BINS = 720, SPREAD = 4, TAU = 2 * Math.PI;
@@ -50,9 +50,9 @@ export function pickTargets( g, reachable, radius, count, layout, { depth = .1 }
 	}
 	const inside = [];
 	for ( let i = 0; i < g.n; i ++ ) if ( reachable[ i ] && Math.hypot( g.xs[ i ], g.zs[ i ] ) <= radius ) inside.push( i );
-	const targets = new Set();
-	for ( let j = 0; j < count * 4 && targets.size < Math.min( count, inside.length ); j ++ ) targets.add( inside[ Math.floor( random() * inside.length ) ] );
-	return [ ...targets ];
+	const destinations = new Set();
+	for ( let j = 0; j < count * 4 && destinations.size < Math.min( count, inside.length ); j ++ ) destinations.add( inside[ Math.floor( random() * inside.length ) ] );
+	return [ ...destinations ];
 }
 
 // algorithm: 'main' prefers main streets (edge cost multipliers), avoids needless turns and bundles routes;
@@ -60,8 +60,8 @@ export function pickTargets( g, reachable, radius, count, layout, { depth = .1 }
 // 'shortest' uses plain distance; 'all' is the shortest-path tree to every node within the radius.
 // Bundling routes destinations in rounds and makes streets used by earlier rounds cheaper, so later routes
 // merge onto them. Yields between rounds; returns null when cancelled() turns true.
-// Resolves to { segs: [ { u, v, flow } ], dist, maxFlow, maxDist, targets, targetNodes }: dist is path length along
-// the result, targets the number of destinations and targetNodes their node indices.
+// Resolves to { segs: [ { u, v, flow } ], dist, maxFlow, maxDist, destinations }: dist is path length along the
+// result and destinations the destination nodes.
 export async function route( g, source, {
 	algorithm = 'main',
 	radius,
@@ -90,21 +90,21 @@ export async function route( g, source, {
 	const base = preferred ? g.len.map( ( l, e ) => l * g.cost[ e ] ) : g.len;
 	const first = shortestPathTree( g, source, base );
 	const reachable = first.dist.map( ( d ) => d < Infinity ? 1 : 0 );
-	const targets = pickTargets( g, reachable, radius, count, layout, { depth } );
+	const destinations = pickDestinations( g, reachable, radius, count, layout, { depth } );
 
-	const rounds = preferred && bundling > 0 ? Math.min( maxRounds, targets.length ) : 1;
+	const rounds = preferred && bundling > 0 ? Math.min( maxRounds, destinations.length ) : 1;
 	const weight = new Float32Array( base );
-	const random = seededRandom( targets.length );
-	for ( let i = targets.length - 1; i > 0; i -- ) {
+	const random = seededRandom( destinations.length );
+	for ( let i = destinations.length - 1; i > 0; i -- ) {
 		const j = Math.floor( random() * ( i + 1 ) );
-		[ targets[ i ], targets[ j ] ] = [ targets[ j ], targets[ i ] ];
+		[ destinations[ i ], destinations[ j ] ] = [ destinations[ j ], destinations[ i ] ];
 	}
 	const turn = preferred ? turnPenalty : 0;
 	for ( let r = 0; r < rounds; r ++ ) {
-		const from = Math.floor( r * targets.length / rounds ), to = Math.floor( ( r + 1 ) * targets.length / rounds );
-		const tree = r === 0 && ! turn ? first : shortestPathTree( g, source, weight, { turnPenalty: turn, goals: targets.slice( from, to ) } );
+		const from = Math.floor( r * destinations.length / rounds ), to = Math.floor( ( r + 1 ) * destinations.length / rounds );
+		const tree = r === 0 && ! turn ? first : shortestPathTree( g, source, weight, { turnPenalty: turn, goals: destinations.slice( from, to ) } );
 		for ( let i = from; i < to; i ++ ) {
-			for ( let v = targets[ i ]; v !== source && tree.parent[ v ] >= 0; v = tree.parent[ v ] ) flow[ tree.parentEdge[ v ] ] ++;
+			for ( let v = destinations[ i ]; v !== source && tree.parent[ v ] >= 0; v = tree.parent[ v ] ) flow[ tree.parentEdge[ v ] ] ++;
 		}
 		for ( let e = 0; e < g.m; e ++ ) {
 			if ( flow[ e ] ) weight[ e ] = base[ e ] * ( 1 - bundling * .95 * ( 1 - Math.exp( - flow[ e ] / .5 ) ) );
@@ -113,10 +113,10 @@ export async function route( g, source, {
 		await new Promise( ( resolve ) => setTimeout( resolve ) );
 		if ( cancelled() ) return null;
 	}
-	return collect( g, source, flow, targets );
+	return collect( g, source, flow, destinations );
 }
 
-function collect( g, source, flow, targets ) {
+function collect( g, source, flow, destinations ) {
 	const only = flow.map( ( f, e ) => f > 0 ? g.len[ e ] : Infinity );
 	const { dist } = shortestPathTree( g, source, only );
 	const segs = [];
@@ -130,7 +130,7 @@ function collect( g, source, flow, targets ) {
 			maxDist = Math.max( maxDist, dist[ v ] );
 		}
 	}
-	return { segs, dist, maxFlow, maxDist, targets: targets.length, targetNodes: targets };
+	return { segs, dist, maxFlow, maxDist, destinations };
 }
 
 // Chains the drawn edges into branches running from the source or a junction to the next junction or dead end.
@@ -163,10 +163,17 @@ export function branches( routes, { exponent = .45 } = {} ) {
 }
 
 // Destinations as { point: [ x, height, z ], dist } for anything drawn at them; unreached ones are dropped.
-export function toTargets( g, heights, routes ) {
-	return routes.targetNodes
+export function toDestinations( g, heights, routes ) {
+	return routes.destinations
 		.filter( ( v ) => routes.dist[ v ] < Infinity )
 		.map( ( v ) => ( { point: [ g.xs[ v ], heights[ v ], g.zs[ v ] ], dist: routes.dist[ v ] } ) );
+}
+
+// How far from the source most of the drawn network reaches: the given quantile of segment-end distances, so one
+// long causeway out to the radius doesn't decide the framing.
+export function routeExtent( g, routes, quantile = .9 ) {
+	const reach = routes.segs.map( ( { v } ) => Math.hypot( g.xs[ v ], g.zs[ v ] ) ).sort( ( a, b ) => a - b );
+	return reach[ Math.floor( reach.length * quantile ) ] || 0;
 }
 
 // Branches as plain 3D paths, the format the renderers and the print model take:

@@ -41,7 +41,6 @@ export const DEFAULTS = {
 	pulse: true,
 	targets: true,
 	rotate: true,
-	pipeline: 'layered',
 	resolution: 1,
 	adaptive: true,
 	printSize: 150,
@@ -78,7 +77,7 @@ export function createSettings() {
 	} );
 	const presets = createPresetStore( params, {
 		storageKey: 'urban-arteries-presets',
-		exclude: [ 'printSize', 'printBase', 'pipeline', 'resolution', 'adaptive' ],
+		exclude: [ 'printSize', 'printBase', 'resolution', 'adaptive' ],
 		builtin: PRESETS,
 	} );
 	return { params, presets };

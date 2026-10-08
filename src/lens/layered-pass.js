@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 
 // Layered depth of field, as an EffectComposer pass in place of a RenderPass. The scene is drawn sharp once per
-// blur band (materials from sharp.js put each stroke's light into the bands either side of its blur radius), each
-// band is blurred by the aperture disc, and the bands are added up. A band is rendered at a resolution where its
+// blur band (lens materials put each stroke's light into the bands either side of its blur radius), each band is
+// blurred by the aperture disc, and the bands are added up. A band is rendered at a resolution where its
 // blur is only BAND_TEXELS wide, so the cost hardly depends on how blurred or how dense the scene is. Everything
 // drawn is light that adds up with nothing hiding anything else, so adding the bands back together is exact.
 
@@ -20,13 +20,13 @@ const quadVertex = /* glsl */`
 `;
 
 export class LayeredPass extends Pass {
-	// uniforms: the shared uniforms from createUniforms(); this pass drives uBin, uBinScale and uResolution.
-	constructor( scene, camera, uniforms, { radii = BAND_RADII } = {} ) {
+	// lens: the uniforms from createLensUniforms(); this pass drives uBand, uBandScale and uResolution.
+	constructor( scene, camera, lens, { radii = BAND_RADII } = {} ) {
 		super();
 		this.needsSwap = false;
 		this.scene = scene;
 		this.camera = camera;
-		this.uniforms = uniforms;
+		this.lens = lens;
 		this.radii = radii;
 		const options = { type: THREE.HalfFloatType, depthBuffer: false };
 		this.bands = radii.map( ( radius ) => ( {
@@ -36,9 +36,9 @@ export class LayeredPass extends Pass {
 			blurred: radius > 0 ? new THREE.WebGLRenderTarget( 1, 1, options ) : null,
 		} ) );
 
-		// The aperture disc as a Vogel spiral of taps, weighted toward the rim by uRim like the direct pipeline.
+		// The aperture disc as a Vogel spiral of taps, weighted toward its rim by uRim.
 		this.blur = new FullScreenQuad( new THREE.ShaderMaterial( {
-			uniforms: { tMap: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1 }, uRim: uniforms.uRim },
+			uniforms: { tMap: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 1 }, uRim: lens.uRim },
 			vertexShader: quadVertex,
 			fragmentShader: /* glsl */`
 				uniform sampler2D tMap;
@@ -103,19 +103,19 @@ export class LayeredPass extends Pass {
 	}
 
 	render( renderer, writeBuffer, readBuffer ) {
-		const { scene, camera, uniforms, radii } = this;
+		const { scene, camera, lens, radii } = this;
 		const background = scene.background;
 		const autoClear = renderer.autoClear;
 		const clearColor = renderer.getClearColor( new THREE.Color() ), clearAlpha = renderer.getClearAlpha();
-		const resolution = uniforms.uResolution.value.clone();
+		const resolution = lens.uResolution.value.clone();
 		scene.background = null;
 		renderer.autoClear = false;
 		renderer.setClearColor( 0x000000, 0 );
 
 		this.bands.forEach( ( band, i ) => {
-			uniforms.uBin.value.set( radii[ i - 1 ] ?? 0, band.radius, radii[ i + 1 ] ?? band.radius );
-			uniforms.uBinScale.value = band.scale;
-			uniforms.uResolution.value.set( band.target.width, band.target.height );
+			lens.uBand.value.set( radii[ i - 1 ] ?? 0, band.radius, radii[ i + 1 ] ?? band.radius );
+			lens.uBandScale.value = band.scale;
+			lens.uResolution.value.set( band.target.width, band.target.height );
 			renderer.setRenderTarget( band.target );
 			renderer.clear();
 			renderer.render( scene, camera );
@@ -131,9 +131,9 @@ export class LayeredPass extends Pass {
 			this.composite.material.uniforms[ `uSize${i}` ].value.set( band.target.width, band.target.height );
 		} );
 
-		uniforms.uBin.value.set( 0, 0, 0 );
-		uniforms.uBinScale.value = 1;
-		uniforms.uResolution.value.copy( resolution );
+		lens.uBand.value.set( 0, 0, 0 );
+		lens.uBandScale.value = 1;
+		lens.uResolution.value.copy( resolution );
 		this.composite.material.uniforms.uBackground.value.copy( background?.isColor ? background : new THREE.Color( 0 ) );
 		renderer.setRenderTarget( this.renderToScreen ? null : readBuffer );
 		this.composite.render( renderer );
