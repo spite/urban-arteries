@@ -44,8 +44,9 @@ result is exact apart from the band spacing, and its cost barely depends on how 
 | `src/render/geometry.js` | `segmentGeometry( paths )`, `particleGeometry( paths )`, `destinationGeometry( destinations )` |
 | `src/render/arteries.js` | `createArteries( lens )` — this app's look: lines or particles, destination dots, origin marker, growth and pulse; `bounds` for the depth of field |
 | `src/render/adaptive.js` | `createAdaptiveScale( onChange )` — lowers render resolution while frames are slow |
-| `src/print/mesh.js` | `tube`, `sphere`, `disc`, `triangles`, `writeSTL` — closed mesh primitives and binary STL |
-| `src/print/model.js` | `buildPrintModel( paths, { radius, size, exag, base, ground } )` → `{ blob, triangles }` |
+| `src/print/tube-geometry.js` | `TubeGeometry( path, tubularSegments, radius, radialSegments, closed, widthCallback, capped )` — three's tube with a radius that varies along the path, optionally capped |
+| `src/print/mesh.js` | `disc`, `triangles` — the closed relief base |
+| `src/print/model.js` | `buildPrintModel( paths, { radius, size, exag, base, ground, step, sides } )` → `{ blob, triangles }` — tubes along smooth curves, spheres at joints, binary STL through three's `STLExporter` |
 | `src/ui/progress.js`, `src/ui/url.js` | `createProgress( element )`; `writeUrl( query, place )`, `readPlace( hash )` |
 | `src/ui/panel.js`, `src/params.js` | this app's guspira panel, settings and presets |
 
@@ -73,9 +74,9 @@ const { blob } = buildPrintModel( paths, { radius, size: 150, base: 'plate' } );
 
 ## Tests
 
-`npm test` runs the offline suite on a recorded street sample (`test/fixtures`): graph, routing, branches, the STL
-being closed and to size, share links, adaptive resolution. `npm install` then `npm run test:online` adds the
-tile and Overpass sources.
+`npm install` once (three, for the print model, and the tile decoders), then `npm test` runs the offline suite on a
+recorded street sample (`test/fixtures`): graph, routing, branches, the STL being closed and to size, share links,
+adaptive resolution. `npm run test:online` adds the tile and Overpass sources.
 
 ## Credits
 
